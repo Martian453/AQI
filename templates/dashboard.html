@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AQI Vision Dashboard</title>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+        }
+
+        h2 {
+            text-align: center;
+            color: #444;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 50vh;
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        .status {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #666;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h2>🌍 Real-Time AQI Monitoring</h2>
+        <div class="status">Updating every 5 seconds...</div>
+
+        <div class="chart-container">
+            <canvas id="aqiChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const ctx = document.getElementById('aqiChart').getContext('2d');
+
+        const aqiChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    { label: 'PM2.5', borderColor: '#FF6384', backgroundColor: 'rgba(255, 99, 132, 0.2)', data: [] },
+                    { label: 'PM10', borderColor: '#36A2EB', backgroundColor: 'rgba(54, 162, 235, 0.2)', data: [] },
+                    { label: 'CO', borderColor: '#FFCE56', backgroundColor: 'rgba(255, 206, 86, 0.2)', data: [] },
+                    { label: 'SO2', borderColor: '#4BC0C0', backgroundColor: 'rgba(75, 192, 192, 0.2)', data: [] },
+                    { label: 'NO2', borderColor: '#9966FF', backgroundColor: 'rgba(153, 102, 255, 0.2)', data: [] },
+                    { label: 'O3', borderColor: '#FF9F40', backgroundColor: 'rgba(255, 159, 64, 0.2)', data: [] }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { title: { display: true, text: 'Time' }, ticks: { maxTicksLimit: 10 } },
+                    y: { beginAtZero: true, title: { display: true, text: 'Concentration' } }
+                },
+                elements: { point: { radius: 3 } },
+                animation: { duration: 0 } // Disable animation for smoother updates
+            }
+        });
+
+        function fetchData() {
+            fetch('/data')
+                .then(response => response.json())
+                .then(data => {
+                    // Formatting timestamps to simple time
+                    const formattedTime = data.timestamps.map(ts => {
+                        const date = new Date(ts);
+                        return date.toLocaleTimeString();
+                    });
+
+                    aqiChart.data.labels = formattedTime;
+                    aqiChart.data.datasets[0].data = data.pm25;
+                    aqiChart.data.datasets[1].data = data.pm10;
+                    aqiChart.data.datasets[2].data = data.co;
+                    aqiChart.data.datasets[3].data = data.so2;
+                    aqiChart.data.datasets[4].data = data.no2;
+                    aqiChart.data.datasets[5].data = data.o3;
+
+                    aqiChart.update();
+                })
+                .catch(err => console.error("Error fetching data:", err));
+        }
+
+        // Refresh every 5 seconds
+        setInterval(fetchData, 5000);
+        fetchData(); // Initial call
+    </script>
+
+</body>
+
+</html>
