@@ -4,6 +4,7 @@ import time
 import sqlite3
 import re
 import numpy as np
+import statistics
 
 # ---------------------------------------------------------
 # CONFIGURATION
@@ -22,12 +23,24 @@ DB_FILE = "aqi.db"
 # ⚠️ YOU MUST ADJUST THESE TO MATCH YOUR SCREEN / CAMERA POSITION
 # Use the "Calibration Mode" window to find the right coordinates.
 ROIS = {
-    "PM2.5": (50, 100, 100, 100),
-    "PM10":  (250, 100, 100, 100),
-    "CO":    (50, 250, 100, 100),
-    "NO2":   (250, 250, 100, 100),
-    "SO2":   (50, 400, 100, 100),
-    "O3":    (250, 400, 100, 100)
+    # Left Column (PM2.5, CO, SO2) -> Shifted Right to match screen
+    "PM2.5": (180, 240, 110, 60),
+    "CO":    (320, 240, 110, 60),  # This seems to be PM10 in your screenshot, swapping columns
+    
+    # Wait, looking at screenshot:
+    # Row 1: PM2.5 (Left), PM10 (Right)
+    # Row 2: CO (Left), NO2 (Right)
+    # Row 3: O3 (Left), SO2 (Right)
+    
+    # UPDATED MAPPING BASED ON IMAGE:
+    "PM2.5": (200, 90, 50, 30),
+    "PM10":  (400, 90, 50, 30),
+    
+    "CO":    (200, 200, 50, 30),
+    "NO2":   (400, 200, 50, 30),
+    
+    "O3":    (200, 330, 50, 30),  # Assuming layout continues
+    "SO2":   (400, 330, 50, 30)
 }
 
 # ---------------------------------------------------------
@@ -63,19 +76,28 @@ def save_to_db(data):
     print(f"💾 Saved to DB: {data}")
 
 def preprocess_roi(roi, invert=False):
-    """Applies grayscale and thresholding. Optionally inverts for Dark Mode."""
+    """Upscales and thresholds the image for maximum OCR accuracy."""
+    # 1. Grayscale
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-    
+
+    # 2. Invert if needed (for Dark Mode)
     if invert:
         gray = cv2.bitwise_not(gray)
-        
+
+    # 3. RESIZE (Critical for accuracy!) 
+    # Upscale by 3x so Tesseract can see details clearly
+    gray = cv2.resize(gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+
+    # 4. Blur & Threshold
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
-    
-    # Adaptive thresholding
     thresh = cv2.adaptiveThreshold(
         blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
         cv2.THRESH_BINARY, 11, 2
     )
+    
+    # 5. Add Border/Padding (Tesseract likes whitespace around text)
+    thresh = cv2.copyMakeBorder(thresh, 10, 10, 10, 10, cv2.BORDER_CONSTANT, value=255)
+    
     return thresh
 
 # ---------------------------------------------------------
@@ -89,6 +111,13 @@ def main():
         return
 
     print("✅ Camera started.")
+    
+    # Check resolution
+    ret, frame = cap.read()
+    if ret:
+        h, w = frame.shape[:2]
+        print(f"📷 Camera Resolution: {w}x{h}")
+
     print("PRESS 's' TO SAVE DATA MANUALLY")
     print("PRESS 'q' TO QUIT")
     
@@ -128,37 +157,81 @@ def main():
             should_save = True
             
         if should_save:
-            print("📸 Capturing and processing... (This may take a moment)")
+            print("📸 BURST MODE: Capturing 5 frames...")
             # Show "Processing" on screen
-            cv2.putText(display_frame, "PROCESSING...", (200, 200), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 255), 3)
+            cv2.putText(display_frame, "PROCESSING BURST...", (200, 200), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 3)
             cv2.imshow("AQI Monitor - Alignment View", display_frame)
-            cv2.waitKey(1) # Force update UI
+            cv2.waitKey(1)
 
-            current_readings = {}
-            for label, (x, y, w, h) in ROIS.items():
-                roi = frame[y:y+h, x:x+w]
-                
-                # --- SMART OCR STRATEGY ---
-                # Attempt 1: Standard (Expects Black Text on White Background)
-                thresh_standard = preprocess_roi(roi, invert=False)
-                config = "--psm 7 -c tessedit_char_whitelist=0123456789."
-                text = pytesseract.image_to_string(thresh_standard, config=config)
-                val = clean_text(text)
-                
-                # Attempt 2: Dark Mode (Expects White Text on Dark Background)
-                if val is None:
-                    thresh_inverted = preprocess_roi(roi, invert=True)
-                    text_inv = pytesseract.image_to_string(thresh_inverted, config=config)
-                    val = clean_text(text_inv)
-                    if val is not None:
-                        print(f"   🌑 Dark Mode detected for {label}")
-
-                print(f"   🔍 Read '{label}': {val}")
-                current_readings[label] = val
+            # Dictionary to store lists of readings: {'PM2.5': [50, 50, None, 52], ...}
+            burst_data = {k: [] for k in ROIS.keys()}
             
-            save_to_db(current_readings)
+            # BURST LOOP: Take 5 samples
+            for i in range(5):
+                # Capture fresh frame
+                ret, frame = cap.read()
+                if not ret: continue
+                
+                print(f"   [Frame {i+1}/5] Analyzing...")
+                
+                for label, (x, y, w, h) in ROIS.items():
+                    # SAFETY CHECK: Ensure ROI is inside the frame
+                    height, width = frame.shape[:2]
+                    if y+h > height or x+w > width:
+                        print(f"   ⚠️ SKIPPING {label}: Coordinate ({x},{y}) out of bounds (Frame size: {width}x{height})")
+                        continue
+
+                    roi = frame[y:y+h, x:x+w]
+                    
+                    # --- SMART OCR STRATEGY ---
+                    val = None
+                    # Use 'PSM 6' (Assume a single uniform block of text)
+                    config = "--psm 6 -c tessedit_char_whitelist=0123456789."
+                    
+                    # Attempt 1: Standard
+                    thresh_standard = preprocess_roi(roi, invert=False)
+                    text = pytesseract.image_to_string(thresh_standard, config=config)
+                    val = clean_text(text)
+                    
+                    # Attempt 2: Dark Mode
+                    if val is None:
+                        thresh_inverted = preprocess_roi(roi, invert=True)
+                        text_inv = pytesseract.image_to_string(thresh_inverted, config=config)
+                        val = clean_text(text_inv)
+                    
+                    # Append result (even None) to list
+                    burst_data[label].append(val)
+                
+                # Small delay between shots
+                time.sleep(0.2)
+
+            # VOTE: Find the most common value (Mode)
+            final_readings = {}
+            for label, values in burst_data.items():
+                # Filter out None values for voting
+                valid_values = [v for v in values if v is not None]
+                
+                if not valid_values:
+                    final_val = None
+                    print(f"   ❌ {label}: No valid data.")
+                else:
+                    try:
+                        final_val = statistics.mode(valid_values)
+                        print(f"   ✅ {label}: {valid_values} -> Voted: {final_val}")
+                    except statistics.StatisticsError:
+                        # If tie (e.g. [50, 52]), take the first one
+                        final_val = valid_values[0]
+                        print(f"   ⚠️ {label}: Tie {valid_values} -> Took: {final_val}")
+                
+                final_readings[label] = final_val
+
+
+
+            save_to_db(final_readings)
             last_save_time = time.time()
 
+        # Key Controls
+        key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
             break
 

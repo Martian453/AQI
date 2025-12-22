@@ -24,15 +24,21 @@ def data():
     rows = get_data()
     
     # Structure data for Chart.js
+    # Filter function: Keep value if not None and < 2000, else 0
+    def clean(val):
+        if val is None: return 0
+        if val > 2000: return 0 # Filter huge OCR errors
+        return val
+
     # Row format: (id, timestamp, pm25, pm10, co, so2, no2, o3)
     response = {
         "timestamps": [r[1] for r in rows],
-        "pm25": [r[2] if r[2] is not None else 0 for r in rows],
-        "pm10": [r[3] if r[3] is not None else 0 for r in rows],
-        "co":   [r[4] if r[4] is not None else 0 for r in rows],
-        "so2":  [r[5] if r[5] is not None else 0 for r in rows],
-        "no2":  [r[6] if r[6] is not None else 0 for r in rows],
-        "o3":   [r[7] if r[7] is not None else 0 for r in rows]
+        "pm25": [clean(r[2]) for r in rows],
+        "pm10": [clean(r[3]) for r in rows],
+        "co":   [clean(r[4]) for r in rows],
+        "so2":  [clean(r[5]) for r in rows],
+        "no2":  [clean(r[6]) for r in rows],
+        "o3":   [clean(r[7]) for r in rows]
     }
     return jsonify(response)
 

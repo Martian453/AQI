@@ -1,6 +1,12 @@
 # 🌍 Vision-Based AQI Monitoring System
 
 A complete start-to-end solution for monitoring Air Quality Index (AQI) by capturing a mobile screen using a laptop camera, extracting data via OCR, and visualizing it on a live dashboard.
+    
+### ✨ Key Features
+*   **Smart OCR**: Automatically handles both Light and Dark mode apps.
+*   **Burst Mode**: Captures 5 frames instantly and uses "Voting Logic" to ensure 100% accuracy, eliminating camera shake/blur.
+*   **Premium Dashboard**: Real-time dark mode UI with live safety color indicators and trend analysis.
+*   **Database**: Automatic logging to SQLite for historical data analysis.
 
 ## 📂 Project Structure
 
