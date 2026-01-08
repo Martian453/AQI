@@ -379,9 +379,15 @@
                     const turbInd = document.getElementById('ind-turb');
                     let turbStatus = "Good";
                     let turbClass = "bg-safe";
-                    if (turbVal < 10) { turbStatus = "Good"; turbClass = "bg-safe"; }
-                    else if (turbVal < 50) { turbStatus = "Medium"; turbClass = "bg-mod"; }
-                    else { turbStatus = "Not Safe"; turbClass = "bg-dang"; }
+
+                    if (turbVal <= 160) {
+                        turbStatus = "Safe";
+                        turbClass = "bg-safe"; // Green
+                    } else {
+                        turbStatus = "Unsafe";
+                        turbClass = "bg-dang"; // Red
+                    }
+
                     turbInd.innerText = `${turbStatus}`;
                     turbInd.className = `card-indicator ${turbClass}`;
 
@@ -403,7 +409,7 @@
                 .catch(err => console.error("Water Error", err));
         }
 
-        setInterval(updateDashboard, 30000); // 30s Refresh
+        setInterval(updateDashboard, 10000); // 10s Refresh
         updateDashboard();
 
     </script>

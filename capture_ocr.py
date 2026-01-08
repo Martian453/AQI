@@ -5,6 +5,7 @@ import sqlite3
 import re
 import numpy as np
 import statistics
+from datetime import datetime
 
 # ---------------------------------------------------------
 # CONFIGURATION
@@ -142,116 +143,130 @@ def main():
     last_save_time = time.time()
     SAVE_INTERVAL = 300  # 5 minutes in seconds
 
+    retry_count = 0
     while True:
-        ret, frame = cap.read()
-        if not ret:
-            print("❌ Error: Failed to capture frame.")
-            break
+        try:
+            ret, frame = cap.read()
+            if not ret:
+                print("❌ Error: Failed to capture frame. Retrying...")
+                retry_count += 1
+                time.sleep(1)
+                if retry_count > 5:
+                    print("❌ Fatal: Camera connection lost.")
+                    break
+                # Re-open camera if needed
+                cap.release()
+                cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+                continue
 
-        # Display frame with rectangles
-        display_frame = frame.copy()
-        
-        # Draw rectangles for alignment
-        for label, (x, y, w, h) in ROIS.items():
-            cv2.rectangle(display_frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-            cv2.putText(display_frame, label, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+            retry_count = 0 # Reset on success
 
-        # Show status
-        time_left = int(SAVE_INTERVAL - (time.time() - last_save_time))
-        status_msg = f"Next Auto-Capture: {time_left}s | Press 's' to Save Now"
-        cv2.putText(display_frame, status_msg, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-
-        cv2.imshow("AQI Monitor - Alignment View", display_frame)
-
-        # TRIGGER OCR ON TIMER OR KEYPRESS
-        key = cv2.waitKey(1) & 0xFF
-        should_save = False
-        
-        if time.time() - last_save_time > SAVE_INTERVAL:
-            print("⏰ Timer triggered.")
-            should_save = True
-        elif key == ord('s'):
-            print("👇 Manual trigger.")
-            should_save = True
+            # Display frame with rectangles
+            display_frame = frame.copy()
             
-        if should_save:
-            print("📸 BURST MODE: Capturing 5 frames...")
-            # Show "Processing" on screen
-            cv2.putText(display_frame, "PROCESSING BURST...", (200, 200), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 3)
+            # Draw rectangles for alignment
+            for label, (x, y, w, h) in ROIS.items():
+                cv2.rectangle(display_frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                cv2.putText(display_frame, label, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+            # Show status
+            time_left = int(SAVE_INTERVAL - (time.time() - last_save_time))
+            status_msg = f"Next Auto-Capture: {time_left}s | Press 's' to Save Now"
+            cv2.putText(display_frame, status_msg, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
             cv2.imshow("AQI Monitor - Alignment View", display_frame)
-            cv2.waitKey(1)
 
-            # Dictionary to store lists of readings: {'PM2.5': [50, 50, None, 52], ...}
-            burst_data = {k: [] for k in ROIS.keys()}
+            # TRIGGER OCR ON TIMER OR KEYPRESS
+            key = cv2.waitKey(1) & 0xFF
+            should_save = False
             
-            # BURST LOOP: Take 5 samples
-            for i in range(5):
-                # Capture fresh frame
-                ret, frame = cap.read()
-                if not ret: continue
+            if time.time() - last_save_time > SAVE_INTERVAL:
+                print("⏰ Timer triggered.")
+                should_save = True
+            elif key == ord('s'):
+                print("👇 Manual trigger.")
+                should_save = True
                 
-                print(f"   [Frame {i+1}/5] Analyzing...")
-                
-                for label, (x, y, w, h) in ROIS.items():
-                    # SAFETY CHECK: Ensure ROI is inside the frame
-                    height, width = frame.shape[:2]
-                    if y+h > height or x+w > width:
-                        print(f"   ⚠️ SKIPPING {label}: Coordinate ({x},{y}) out of bounds (Frame size: {width}x{height})")
-                        continue
+            if should_save:
+                print("📸 BURST MODE: Capturing 5 frames...")
+                # Show "Processing" on screen
+                cv2.putText(display_frame, "PROCESSING BURST...", (200, 200), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 3)
+                cv2.imshow("AQI Monitor - Alignment View", display_frame)
+                cv2.waitKey(1)
 
-                    roi = frame[y:y+h, x:x+w]
+                # Dictionary to store lists of readings: {'PM2.5': [50, 50, None, 52], ...}
+                burst_data = {k: [] for k in ROIS.keys()}
+                
+                # BURST LOOP: Take 5 samples
+                for i in range(5):
+                    # Capture fresh frame
+                    ret, frame = cap.read()
+                    if not ret: continue
                     
-                    # --- SMART OCR STRATEGY ---
-                    val = None
-                    # Use 'PSM 6' (Assume a single uniform block of text)
-                    config = "--psm 6 -c tessedit_char_whitelist=0123456789."
+                    print(f"   [Frame {i+1}/5] Analyzing...")
                     
-                    # Attempt 1: Standard
-                    thresh_standard = preprocess_roi(roi, invert=False)
-                    text = pytesseract.image_to_string(thresh_standard, config=config)
-                    val = clean_text(text)
+                    for label, (x, y, w, h) in ROIS.items():
+                        # SAFETY CHECK: Ensure ROI is inside the frame
+                        height, width = frame.shape[:2]
+                        if y+h > height or x+w > width:
+                            print(f"   ⚠️ SKIPPING {label}: Coordinate ({x},{y}) out of bounds (Frame size: {width}x{height})")
+                            continue
+
+                        roi = frame[y:y+h, x:x+w]
+                        
+                        # --- SMART OCR STRATEGY ---
+                        val = None
+                        # Use 'PSM 6' (Assume a single uniform block of text)
+                        config = "--psm 6 -c tessedit_char_whitelist=0123456789."
+                        
+                        # Attempt 1: Standard
+                        thresh_standard = preprocess_roi(roi, invert=False)
+                        text = pytesseract.image_to_string(thresh_standard, config=config)
+                        val = clean_text(text)
+                        
+                        # Attempt 2: Dark Mode
+                        if val is None:
+                            thresh_inverted = preprocess_roi(roi, invert=True)
+                            text_inv = pytesseract.image_to_string(thresh_inverted, config=config)
+                            val = clean_text(text_inv)
+                        
+                        # Append result (even None) to list
+                        burst_data[label].append(val)
                     
-                    # Attempt 2: Dark Mode
-                    if val is None:
-                        thresh_inverted = preprocess_roi(roi, invert=True)
-                        text_inv = pytesseract.image_to_string(thresh_inverted, config=config)
-                        val = clean_text(text_inv)
+                    # Small delay between shots
+                    time.sleep(0.2)
+
+                # VOTE: Find the most common value (Mode)
+                final_readings = {}
+                for label, values in burst_data.items():
+                    # Filter out None values for voting
+                    valid_values = [v for v in values if v is not None]
                     
-                    # Append result (even None) to list
-                    burst_data[label].append(val)
-                
-                # Small delay between shots
-                time.sleep(0.2)
+                    if not valid_values:
+                        final_val = None
+                        print(f"   ❌ {label}: No valid data.")
+                    else:
+                        try:
+                            final_val = statistics.mode(valid_values)
+                            print(f"   ✅ {label}: {valid_values} -> Voted: {final_val}")
+                        except statistics.StatisticsError:
+                            # If tie (e.g. [50, 52]), take the first one
+                            final_val = valid_values[0]
+                            print(f"   ⚠️ {label}: Tie {valid_values} -> Took: {final_val}")
+                    
+                    final_readings[label] = final_val
 
-            # VOTE: Find the most common value (Mode)
-            final_readings = {}
-            for label, values in burst_data.items():
-                # Filter out None values for voting
-                valid_values = [v for v in values if v is not None]
-                
-                if not valid_values:
-                    final_val = None
-                    print(f"   ❌ {label}: No valid data.")
-                else:
-                    try:
-                        final_val = statistics.mode(valid_values)
-                        print(f"   ✅ {label}: {valid_values} -> Voted: {final_val}")
-                    except statistics.StatisticsError:
-                        # If tie (e.g. [50, 52]), take the first one
-                        final_val = valid_values[0]
-                        print(f"   ⚠️ {label}: Tie {valid_values} -> Took: {final_val}")
-                
-                final_readings[label] = final_val
+                save_to_db(final_readings)
+                last_save_time = time.time()
 
-
-
-            save_to_db(final_readings)
-            last_save_time = time.time()
-
-        # Key Controls
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord('q'):
-            break
+            # Key Controls
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('q'):
+                break
+        
+        except Exception as e:
+            print(f"⚠️ Warning: Crashed in loop: {e}")
+            time.sleep(1) # Prevent CPU spin if constant error
 
     cap.release()
     cv2.destroyAllWindows()
