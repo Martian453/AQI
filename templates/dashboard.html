@@ -43,8 +43,17 @@
             padding-bottom: 20px;
         }
 
-        h2 { margin: 0; font-weight: 800; letter-spacing: -1px; }
-        .status { font-size: 0.9em; color: var(--accent); font-weight: 600; }
+        h2 {
+            margin: 0;
+            font-weight: 800;
+            letter-spacing: -1px;
+        }
+
+        .status {
+            font-size: 0.9em;
+            color: var(--accent);
+            font-weight: 600;
+        }
 
         /* LIVE CARDS GRID */
         .cards-grid {
@@ -62,20 +71,65 @@
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
             transition: transform 0.2s;
         }
-        .card:hover { transform: translateY(-5px); }
 
-        .card-label { color: var(--text-muted); font-size: 0.8em; text-transform: uppercase; letter-spacing: 1px; }
-        .card-value { font-size: 2.5em; font-weight: 800; margin: 10px 0; }
-        .card-unit { font-size: 0.4em; color: var(--text-muted); font-weight: 400; }
-        .card-indicator { font-size: 0.8em; font-weight: 600; padding: 4px 12px; border-radius: 20px; display: inline-block;}
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card-label {
+            color: var(--text-muted);
+            font-size: 0.8em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .card-value {
+            font-size: 2.5em;
+            font-weight: 800;
+            margin: 10px 0;
+        }
+
+        .card-unit {
+            font-size: 0.4em;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        .card-indicator {
+            font-size: 0.8em;
+            font-weight: 600;
+            padding: 4px 12px;
+            border-radius: 20px;
+            display: inline-block;
+        }
 
         /* SAFE COLORS */
-        .safe { color: var(--good); }
-        .mod { color: var(--moderate); }
-        .dang { color: var(--unhealthy); }
-        .bg-safe { background: rgba(74, 222, 128, 0.2); color: var(--good); }
-        .bg-mod { background: rgba(250, 204, 21, 0.2); color: var(--moderate); }
-        .bg-dang { background: rgba(248, 113, 113, 0.2); color: var(--unhealthy); }
+        .safe {
+            color: var(--good);
+        }
+
+        .mod {
+            color: var(--moderate);
+        }
+
+        .dang {
+            color: var(--unhealthy);
+        }
+
+        .bg-safe {
+            background: rgba(74, 222, 128, 0.2);
+            color: var(--good);
+        }
+
+        .bg-mod {
+            background: rgba(250, 204, 21, 0.2);
+            color: var(--moderate);
+        }
+
+        .bg-dang {
+            background: rgba(248, 113, 113, 0.2);
+            color: var(--unhealthy);
+        }
 
         /* CHARTS SECTION */
         .charts-row {
@@ -83,7 +137,7 @@
             grid-template-columns: 2fr 1fr;
             gap: 20px;
         }
-        
+
         .chart-box {
             background: var(--card-bg);
             padding: 20px;
@@ -91,8 +145,12 @@
             height: 400px;
             position: relative;
         }
-        .chart-title { margin-bottom: 15px; font-weight: 600; color: var(--text-muted); }
 
+        .chart-title {
+            margin-bottom: 15px;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
     </style>
 </head>
 
@@ -123,14 +181,48 @@
                 <canvas id="safetyChart"></canvas>
             </div>
         </div>
+        <!-- WATER QUALITY SECTION -->
+        <header style="margin-top:50px; border-top: 1px solid #334155; padding-top:20px;">
+            <div>
+                <h2>💧 Water Quality <span style="color:var(--good)">LIVE</span></h2>
+                <div style="font-size:0.8em; color:var(--text-muted)">Real-time Sensor Feed from ESP32</div>
+            </div>
+            <div class="status" id="water-status">CONNECTING...</div>
+        </header>
+
+        <div class="cards-grid">
+            <div class="card">
+                <div class="card-label">pH Level</div>
+                <div class="card-value" id="val-ph">--</div>
+                <div class="card-indicator" id="ind-ph">Waiting</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Turbidity</div>
+                <div class="card-value" id="val-turb">--<span class="card-unit">NTU</span></div>
+                <div class="card-indicator" id="ind-turb">Waiting</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Water Level</div>
+                <div class="card-value" id="val-level">--<span class="card-unit">m</span></div>
+                <div class="card-indicator" id="ind-level">Waiting</div>
+            </div>
+        </div>
+
+        <div class="charts-row">
+            <div class="chart-box" style="grid-column: span 2;">
+                <div class="chart-title">🌊 Water Quality Trends (pH & Level)</div>
+                <canvas id="waterChart"></canvas>
+            </div>
+        </div>
+
     </div>
 
     <script>
         // CONFIGURATION
         const POLLUTANTS = ['PM2.5', 'PM10', 'CO', 'SO2', 'NO2', 'O3'];
         const UNITS = { 'PM2.5': 'µg/m³', 'PM10': 'µg/m³', 'CO': 'ppb', 'SO2': 'ppb', 'NO2': 'ppb', 'O3': 'ppb' };
-        
-        // Limits for "Good" air (simplified for visual demo)
+
+        // Limits for "Good" air
         const LIMITS = { 'PM2.5': 30, 'PM10': 50, 'CO': 100, 'SO2': 20, 'NO2': 40, 'O3': 60 };
 
         // 1. SETUP CARDS
@@ -147,6 +239,7 @@
         Chart.defaults.color = '#94a3b8';
         Chart.defaults.borderColor = '#334155';
 
+        // AQI CHART
         const ctxTrend = document.getElementById('trendChart').getContext('2d');
         const trendChart = new Chart(ctxTrend, {
             type: 'line',
@@ -156,19 +249,17 @@
                     label: p,
                     data: [],
                     borderColor: ['#38bdf8', '#4ade80', '#facc15', '#f87171', '#c084fc', '#fb923c'][i],
-                    tension: 0.4,
-                    borderWidth: 2,
-                    pointRadius: 0
+                    tension: 0.4, borderWidth: 2, pointRadius: 0
                 }))
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: false,
+                responsive: true, maintainAspectRatio: false,
                 scales: { x: { display: false }, y: { beginAtZero: true } },
                 plugins: { legend: { position: 'top' } }
             }
         });
 
+        // SAFETY CHART
         const ctxSafety = document.getElementById('safetyChart').getContext('2d');
         const safetyChart = new Chart(ctxSafety, {
             type: 'bar',
@@ -176,28 +267,45 @@
                 labels: POLLUTANTS,
                 datasets: [{
                     label: 'Current Level',
-                    data: [0,0,0,0,0,0],
+                    data: [0, 0, 0, 0, 0, 0],
                     backgroundColor: POLLUTANTS.map(p => '#38bdf8'),
                     borderRadius: 5
                 }]
             },
             options: {
-                indexAxis: 'y',
-                responsive: true,
-                maintainAspectRatio: false,
+                indexAxis: 'y', responsive: true, maintainAspectRatio: false,
                 plugins: { legend: { display: false } }
+            }
+        });
+
+        // WATER CHART
+        const ctxWater = document.getElementById('waterChart').getContext('2d');
+        // Initial Empty Data
+        const waterChart = new Chart(ctxWater, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [
+                    { label: 'pH', data: [], backgroundColor: 'cyan', borderColor: 'cyan', borderWidth: 1 },
+                    { label: 'Water Level (x10 m)', data: [], backgroundColor: 'red', borderColor: 'red', borderWidth: 1 },
+                    { label: 'Turbidity (/20 NTU)', data: [], backgroundColor: 'lime', borderColor: 'lime', borderWidth: 1 }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: { x: { display: false }, y: { beginAtZero: true } }
             }
         });
 
         // 3. FETCH LOOP
         function updateDashboard() {
+            // --- AQI DATA ---
             fetch('/data')
                 .then(res => res.json())
                 .then(data => {
                     const count = data.timestamps.length;
                     if (count === 0) return;
 
-                    // Update Charts
                     trendChart.data.labels = data.timestamps;
                     trendChart.data.datasets[0].data = data.pm25;
                     trendChart.data.datasets[1].data = data.pm10;
@@ -207,61 +315,105 @@
                     trendChart.data.datasets[5].data = data.o3;
                     trendChart.update();
 
-                    // Get LATEST values (last item in array)
                     const latest = {
-                        'PM2.5': data.pm25[count-1],
-                        'PM10':  data.pm10[count-1],
-                        'CO':    data.co[count-1],
-                        'SO2':   data.so2[count-1],
-                        'NO2':   data.no2[count-1],
-                        'O3':    data.o3[count-1]
+                        'PM2.5': data.pm25[count - 1], 'PM10': data.pm10[count - 1],
+                        'CO': data.co[count - 1], 'SO2': data.so2[count - 1],
+                        'NO2': data.no2[count - 1], 'O3': data.o3[count - 1]
                     };
 
-                    // Update Cards & Safety Chart
                     const safetyData = [];
                     const safetyColors = [];
-
-                    POLLUTANTS.forEach((p, index) => {
+                    POLLUTANTS.forEach((p) => {
                         const val = latest[p];
                         const limit = LIMITS[p];
-
-                        // Text Update
-                        document.getElementById(`val-${p}`).innerHTML = 
-                            `${val}<span class="card-unit">${UNITS[p]}</span>`;
-
-                        // Logic: Good? Bad?
+                        document.getElementById(`val-${p}`).innerHTML = `${val}<span class="card-unit">${UNITS[p]}</span>`;
                         const ind = document.getElementById(`ind-${p}`);
-                        let status = "SAFE";
-                        let cssClass = "bg-safe";
-                        let colorHex = "#4ade80"; // Green
-
-                        if (val > limit * 2) { 
-                            status = "HAZARDOUS"; cssClass = "bg-dang"; colorHex = "#f87171"; // Red
-                        } else if (val > limit) { 
-                            status = "MODERATE"; cssClass = "bg-mod"; colorHex = "#facc15"; // Yellow
-                        }
-
-                        // Apply Styles
-                        ind.innerText = status;
-                        ind.className = `card-indicator ${cssClass}`;
-                        
-                        // Push to Safety Chart
+                        let cssClass = "bg-safe"; let status = "SAFE";
+                        if (val > limit * 2) { status = "HAZARDOUS"; cssClass = "bg-dang"; }
+                        else if (val > limit) { status = "MODERATE"; cssClass = "bg-mod"; }
+                        ind.innerText = status; ind.className = `card-indicator ${cssClass}`;
                         safetyData.push(val);
-                        safetyColors.push(colorHex);
+                        safetyColors.push(cssClass.includes('dang') ? '#f87171' : (cssClass.includes('mod') ? '#facc15' : '#38bdf8'));
                     });
-
-                    // Update Safety Bar Chart
                     safetyChart.data.datasets[0].data = safetyData;
                     safetyChart.data.datasets[0].backgroundColor = safetyColors;
                     safetyChart.update();
-
                 })
-                .catch(err => console.error(err));
+                .catch(err => console.error("AQI Error", err));
+
+            // --- WATER DATA ---
+            fetch('/water_data')
+                .then(res => res.json())
+                .then(d => {
+                    // Update Status
+                    if (d.error) {
+                        document.getElementById('water-status').innerText = "ESP32 OFFLINE";
+                        document.getElementById('water-status').style.color = "red";
+                        return;
+                    }
+                    document.getElementById('water-status').innerText = "ESP32 ONLINE";
+                    document.getElementById('water-status').style.color = "lime";
+
+                    // Update Cards
+                    document.getElementById('val-ph').innerText = d.ph;
+                    document.getElementById('val-turb').innerHTML = `${d.turbidity}<span class="card-unit">NTU</span>`;
+                    document.getElementById('val-level').innerHTML = `${d.level}<span class="card-unit">m</span>`;
+
+                    // Update pH Indicator
+                    const phVal = d.ph;
+                    const phInd = document.getElementById('ind-ph');
+                    let phStatus = "Neutral";
+                    let phClass = "bg-safe"; // Green
+
+                    if (phVal < 6) {
+                        phStatus = "Acidic"; phClass = "bg-dang"; // Red
+                    } else if (phVal > 8) {
+                        phStatus = "Alkaline"; phClass = "bg-dang"; // Red
+                    }
+                    phInd.innerText = phStatus;
+                    phInd.className = `card-indicator ${phClass}`;
+
+                    // Update Turbidity Indicator
+                    const turbVal = d.turbidity;
+                    const turbInd = document.getElementById('ind-turb');
+                    let turbStatus = "Good";
+                    let turbClass = "bg-safe";
+
+                    if (turbVal < 10) { turbStatus = "Good"; turbClass = "bg-safe"; }
+                    else if (turbVal < 50) { turbStatus = "Medium"; turbClass = "bg-mod"; } // Yellow
+                    else { turbStatus = "Not Safe"; turbClass = "bg-dang"; } // Red
+
+                    turbInd.innerText = `${turbStatus}`;
+                    turbInd.className = `card-indicator ${turbClass}`;
+
+                    // Update Water Level Indicator
+                    document.getElementById('ind-level').innerText = d.level < 1 ? "Low" : "Optimal";
+                    document.getElementById('ind-level').className = d.level < 1 ? "card-indicator bg-mod" : "card-indicator bg-safe";
+
+                    // Push to Chart
+                    const now = new Date().toLocaleTimeString();
+                    if (waterChart.data.labels.length > 20) {
+                        waterChart.data.labels.shift();
+                        waterChart.data.datasets.forEach(dst => dst.data.shift());
+                    }
+                    waterChart.data.labels.push(now);
+                    waterChart.data.datasets[0].data.push(d.ph);
+                    waterChart.data.datasets[1].data.push(d.level);
+                    // Scaling turbidity down by 100 to fit on chart? Or just plotting raw. 
+                    // Let's plot raw but it might dominate.
+                    // User said "similar to aqi". Visualizing 2.0 (pH) vs 1000 (Turb) is hard.
+                    // I'll divide turbidity by 100 for the visualization to keep it in range [0-10].
+                    waterChart.data.datasets[2].data.push(d.turbidity / 100);
+
+                    waterChart.update();
+                })
+                .catch(err => console.error("Water Error", err));
         }
 
-        setInterval(updateDashboard, 2000); // Fast 2s refresh for "Real Time" feel
+        setInterval(updateDashboard, 30000); // Efficient: Refresh every 30 seconds
         updateDashboard();
 
     </script>
 </body>
+
 </html>

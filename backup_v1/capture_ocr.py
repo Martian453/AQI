@@ -56,42 +56,24 @@ def clean_text(text):
     except ValueError:
         return None
 
-def get_water_data():
-    try:
-        r = requests.get(ESP_URL, timeout=1)
-        if r.status_code == 200:
-            return r.json()
-    except:
-        pass
-    return {'ph': 0, 'turbidity': 0, 'level': 0}
-
 def save_to_db(data):
-    """Saves the voted AQI data AND Water Data to the database."""
+    """Saves a dictionary of pollutants to the database."""
     conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    
-    # fetch water data
-    w = get_water_data()
-    
-    timestamp = datetime.now()
-    
-    c.execute('''INSERT INTO aqi_data 
-                 (timestamp, pm25, pm10, co, so2, no2, o3, ph, turbidity, water_level)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-              (timestamp, 
-               data.get('PM2.5', 0), 
-               data.get('PM10', 0), 
-               data.get('CO', 0), 
-               data.get('SO2', 0), 
-               data.get('NO2', 0), 
-               data.get('O3', 0),
-               w.get('ph', 0),
-               w.get('turbidity', 0),
-               w.get('level', 0)
-              ))
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO aqi_data (pm25, pm10, co, so2, no2, o3)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (
+        data.get("PM2.5"),
+        data.get("PM10"),
+        data.get("CO"),
+        data.get("SO2"),
+        data.get("NO2"),
+        data.get("O3")
+    ))
     conn.commit()
     conn.close()
-    print(f"💾 Saved to DB: AQI + Water (pH:{w.get('ph')} Turb:{w.get('turbidity')})")
+    print(f"💾 Saved to DB: {data}")
 
 def preprocess_roi(roi, invert=False):
     """Upscales and thresholds the image for maximum OCR accuracy."""

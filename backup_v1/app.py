@@ -1,14 +1,9 @@
 from flask import Flask, render_template, jsonify
 import sqlite3
-import requests
 
 app = Flask(__name__)
 
-# CONSTANTS
 DB_FILE = "aqi.db"
-ESP_URL = "http://10.161.184.150/data" # ESP32 Proxy URL
-
-
 
 def get_data():
     conn = sqlite3.connect(DB_FILE)
@@ -23,19 +18,6 @@ def get_data():
 @app.route("/")
 def dashboard():
     return render_template("dashboard.html")
-
-@app.route('/water_data')
-def water_data():
-    try:
-        # Fetch data from ESP32 with a short timeout (e.g. 2 seconds)
-        response = requests.get(ESP_URL, timeout=2)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            return jsonify({'error': 'ESP32 Error', 'ph': 0, 'turbidity': 0, 'level': 0})
-    except Exception as e:
-        # If ESP is offline, return zeros so dashboard doesn't break
-        return jsonify({'error': str(e), 'ph': 0, 'turbidity': 0, 'level': 0})
 
 @app.route("/data")
 def data():

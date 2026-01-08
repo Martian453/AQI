@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AQI Vision Premium Dashboard</title>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --good: #4ade80;
+            --moderate: #facc15;
+            --unhealthy: #f87171;
+            --hazardous: #c084fc;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 20px;
+        }
+
+        h2 { margin: 0; font-weight: 800; letter-spacing: -1px; }
+        .status { font-size: 0.9em; color: var(--accent); font-weight: 600; }
+
+        /* LIVE CARDS GRID */
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            padding: 20px;
+            border-radius: 16px;
+            text-align: center;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+        }
+        .card:hover { transform: translateY(-5px); }
+
+        .card-label { color: var(--text-muted); font-size: 0.8em; text-transform: uppercase; letter-spacing: 1px; }
+        .card-value { font-size: 2.5em; font-weight: 800; margin: 10px 0; }
+        .card-unit { font-size: 0.4em; color: var(--text-muted); font-weight: 400; }
+        .card-indicator { font-size: 0.8em; font-weight: 600; padding: 4px 12px; border-radius: 20px; display: inline-block;}
+
+        /* SAFE COLORS */
+        .safe { color: var(--good); }
+        .mod { color: var(--moderate); }
+        .dang { color: var(--unhealthy); }
+        .bg-safe { background: rgba(74, 222, 128, 0.2); color: var(--good); }
+        .bg-mod { background: rgba(250, 204, 21, 0.2); color: var(--moderate); }
+        .bg-dang { background: rgba(248, 113, 113, 0.2); color: var(--unhealthy); }
+
+        /* CHARTS SECTION */
+        .charts-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+        }
+        
+        .chart-box {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 16px;
+            height: 400px;
+            position: relative;
+        }
+        .chart-title { margin-bottom: 15px; font-weight: 600; color: var(--text-muted); }
+
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <header>
+            <div>
+                <h2>🌍 AQI Vision <span style="color:var(--accent)">PRO</span></h2>
+                <div style="font-size:0.8em; color:var(--text-muted)">Live Environmental Monitoring System</div>
+            </div>
+            <div class="status">⚡ LIVE UPDATES ACTIVE</div>
+        </header>
+
+        <!-- LIVE SCORE CARDS -->
+        <div class="cards-grid" id="cards-container">
+            <!-- Injected by JS -->
+        </div>
+
+        <!-- CHARTS -->
+        <div class="charts-row">
+            <div class="chart-box">
+                <div class="chart-title">📊 1-Hour Trend Analysis</div>
+                <canvas id="trendChart"></canvas>
+            </div>
+            <div class="chart-box">
+                <div class="chart-title">🛡️ Current Safety Levels</div>
+                <canvas id="safetyChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // CONFIGURATION
+        const POLLUTANTS = ['PM2.5', 'PM10', 'CO', 'SO2', 'NO2', 'O3'];
+        const UNITS = { 'PM2.5': 'µg/m³', 'PM10': 'µg/m³', 'CO': 'ppb', 'SO2': 'ppb', 'NO2': 'ppb', 'O3': 'ppb' };
+        
+        // Limits for "Good" air (simplified for visual demo)
+        const LIMITS = { 'PM2.5': 30, 'PM10': 50, 'CO': 100, 'SO2': 20, 'NO2': 40, 'O3': 60 };
+
+        // 1. SETUP CARDS
+        const cardsHTML = POLLUTANTS.map(p => `
+            <div class="card">
+                <div class="card-label">${p}</div>
+                <div class="card-value" id="val-${p}">--<span class="card-unit">${UNITS[p]}</span></div>
+                <div class="card-indicator" id="ind-${p}">Waiting...</div>
+            </div>
+        `).join('');
+        document.getElementById('cards-container').innerHTML = cardsHTML;
+
+        // 2. SETUP CHARTS
+        Chart.defaults.color = '#94a3b8';
+        Chart.defaults.borderColor = '#334155';
+
+        const ctxTrend = document.getElementById('trendChart').getContext('2d');
+        const trendChart = new Chart(ctxTrend, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: POLLUTANTS.map((p, i) => ({
+                    label: p,
+                    data: [],
+                    borderColor: ['#38bdf8', '#4ade80', '#facc15', '#f87171', '#c084fc', '#fb923c'][i],
+                    tension: 0.4,
+                    borderWidth: 2,
+                    pointRadius: 0
+                }))
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: { x: { display: false }, y: { beginAtZero: true } },
+                plugins: { legend: { position: 'top' } }
+            }
+        });
+
+        const ctxSafety = document.getElementById('safetyChart').getContext('2d');
+        const safetyChart = new Chart(ctxSafety, {
+            type: 'bar',
+            data: {
+                labels: POLLUTANTS,
+                datasets: [{
+                    label: 'Current Level',
+                    data: [0,0,0,0,0,0],
+                    backgroundColor: POLLUTANTS.map(p => '#38bdf8'),
+                    borderRadius: 5
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } }
+            }
+        });
+
+        // 3. FETCH LOOP
+        function updateDashboard() {
+            fetch('/data')
+                .then(res => res.json())
+                .then(data => {
+                    const count = data.timestamps.length;
+                    if (count === 0) return;
+
+                    // Update Charts
+                    trendChart.data.labels = data.timestamps;
+                    trendChart.data.datasets[0].data = data.pm25;
+                    trendChart.data.datasets[1].data = data.pm10;
+                    trendChart.data.datasets[2].data = data.co;
+                    trendChart.data.datasets[3].data = data.so2;
+                    trendChart.data.datasets[4].data = data.no2;
+                    trendChart.data.datasets[5].data = data.o3;
+                    trendChart.update();
+
+                    // Get LATEST values (last item in array)
+                    const latest = {
+                        'PM2.5': data.pm25[count-1],
+                        'PM10':  data.pm10[count-1],
+                        'CO':    data.co[count-1],
+                        'SO2':   data.so2[count-1],
+                        'NO2':   data.no2[count-1],
+                        'O3':    data.o3[count-1]
+                    };
+
+                    // Update Cards & Safety Chart
+                    const safetyData = [];
+                    const safetyColors = [];
+
+                    POLLUTANTS.forEach((p, index) => {
+                        const val = latest[p];
+                        const limit = LIMITS[p];
+
+                        // Text Update
+                        document.getElementById(`val-${p}`).innerHTML = 
+                            `${val}<span class="card-unit">${UNITS[p]}</span>`;
+
+                        // Logic: Good? Bad?
+                        const ind = document.getElementById(`ind-${p}`);
+                        let status = "SAFE";
+                        let cssClass = "bg-safe";
+                        let colorHex = "#4ade80"; // Green
+
+                        if (val > limit * 2) { 
+                            status = "HAZARDOUS"; cssClass = "bg-dang"; colorHex = "#f87171"; // Red
+                        } else if (val > limit) { 
+                            status = "MODERATE"; cssClass = "bg-mod"; colorHex = "#facc15"; // Yellow
+                        }
+
+                        // Apply Styles
+                        ind.innerText = status;
+                        ind.className = `card-indicator ${cssClass}`;
+                        
+                        // Push to Safety Chart
+                        safetyData.push(val);
+                        safetyColors.push(colorHex);
+                    });
+
+                    // Update Safety Bar Chart
+                    safetyChart.data.datasets[0].data = safetyData;
+                    safetyChart.data.datasets[0].backgroundColor = safetyColors;
+                    safetyChart.update();
+
+                })
+                .catch(err => console.error(err));
+        }
+
+        setInterval(updateDashboard, 2000); // Fast 2s refresh for "Real Time" feel
+        updateDashboard();
+
+    </script>
+</body>
+</html>
