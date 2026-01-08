@@ -278,22 +278,27 @@
             }
         });
 
-        // WATER CHART
+        // WATER CHART (Live Status - 3 Fixed Bars)
         const ctxWater = document.getElementById('waterChart').getContext('2d');
-        // Initial Empty Data
         const waterChart = new Chart(ctxWater, {
             type: 'bar',
             data: {
-                labels: [],
-                datasets: [
-                    { label: 'pH', data: [], backgroundColor: 'cyan', borderColor: 'cyan', borderWidth: 1 },
-                    { label: 'Water Level (x10 m)', data: [], backgroundColor: 'red', borderColor: 'red', borderWidth: 1 },
-                    { label: 'Turbidity (/20 NTU)', data: [], backgroundColor: 'lime', borderColor: 'lime', borderWidth: 1 }
-                ]
+                labels: ['pH', 'Water Level (x10 m)', 'Turbidity (/20 NTU)'],
+                datasets: [{
+                    label: 'Live Value',
+                    data: [0, 0, 0], // Initial values
+                    backgroundColor: ['cyan', 'red', 'lime'],
+                    borderColor: ['cyan', 'red', 'lime'],
+                    borderWidth: 1
+                }]
             },
             options: {
-                responsive: true, maintainAspectRatio: false,
-                scales: { x: { display: false }, y: { beginAtZero: true } }
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, suggestedMax: 10 }
+                },
+                plugins: { legend: { display: false } }
             }
         });
 
@@ -359,17 +364,13 @@
                     document.getElementById('val-turb').innerHTML = `${d.turbidity}<span class="card-unit">NTU</span>`;
                     document.getElementById('val-level').innerHTML = `${d.level}<span class="card-unit">m</span>`;
 
-                    // Update pH Indicator
+                    // Update pH Indicator & Class
                     const phVal = d.ph;
                     const phInd = document.getElementById('ind-ph');
                     let phStatus = "Neutral";
-                    let phClass = "bg-safe"; // Green
-
-                    if (phVal < 6) {
-                        phStatus = "Acidic"; phClass = "bg-dang"; // Red
-                    } else if (phVal > 8) {
-                        phStatus = "Alkaline"; phClass = "bg-dang"; // Red
-                    }
+                    let phClass = "bg-safe";
+                    if (phVal < 6) { phStatus = "Acidic"; phClass = "bg-dang"; }
+                    else if (phVal > 8) { phStatus = "Alkaline"; phClass = "bg-dang"; }
                     phInd.innerText = phStatus;
                     phInd.className = `card-indicator ${phClass}`;
 
@@ -378,11 +379,9 @@
                     const turbInd = document.getElementById('ind-turb');
                     let turbStatus = "Good";
                     let turbClass = "bg-safe";
-
                     if (turbVal < 10) { turbStatus = "Good"; turbClass = "bg-safe"; }
-                    else if (turbVal < 50) { turbStatus = "Medium"; turbClass = "bg-mod"; } // Yellow
-                    else { turbStatus = "Not Safe"; turbClass = "bg-dang"; } // Red
-
+                    else if (turbVal < 50) { turbStatus = "Medium"; turbClass = "bg-mod"; }
+                    else { turbStatus = "Not Safe"; turbClass = "bg-dang"; }
                     turbInd.innerText = `${turbStatus}`;
                     turbInd.className = `card-indicator ${turbClass}`;
 
@@ -390,27 +389,21 @@
                     document.getElementById('ind-level').innerText = d.level < 1 ? "Low" : "Optimal";
                     document.getElementById('ind-level').className = d.level < 1 ? "card-indicator bg-mod" : "card-indicator bg-safe";
 
-                    // Push to Chart
-                    const now = new Date().toLocaleTimeString();
-                    if (waterChart.data.labels.length > 20) {
-                        waterChart.data.labels.shift();
-                        waterChart.data.datasets.forEach(dst => dst.data.shift());
-                    }
-                    waterChart.data.labels.push(now);
-                    waterChart.data.datasets[0].data.push(d.ph);
-                    waterChart.data.datasets[1].data.push(d.level);
-                    // Scaling turbidity down by 100 to fit on chart? Or just plotting raw. 
-                    // Let's plot raw but it might dominate.
-                    // User said "similar to aqi". Visualizing 2.0 (pH) vs 1000 (Turb) is hard.
-                    // I'll divide turbidity by 100 for the visualization to keep it in range [0-10].
-                    waterChart.data.datasets[2].data.push(d.turbidity / 100);
+                    // UPDATE THE STATIC BAR CHART (3 Bars Only)
+                    // The labels are fixed: ['pH', 'Level', 'Turbidity']
+                    // We just update the data array at those 3 indexes.
+                    waterChart.data.datasets[0].data = [
+                        d.ph,
+                        d.level * 10,
+                        d.turbidity / 20
+                    ];
 
                     waterChart.update();
                 })
                 .catch(err => console.error("Water Error", err));
         }
 
-        setInterval(updateDashboard, 30000); // Efficient: Refresh every 30 seconds
+        setInterval(updateDashboard, 30000); // 30s Refresh
         updateDashboard();
 
     </script>
