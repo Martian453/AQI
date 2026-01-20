@@ -14,13 +14,16 @@ def init_db():
         co REAL,
         so2 REAL,
         no2 REAL,
-        o3 REAL
+        o3 REAL,
+        ph REAL,
+        turbidity REAL,
+        water_level REAL
     )
     """)
     
     conn.commit()
     conn.close()
-    print("✅ Database 'aqi.db' initialized successfully.")
+    print("Database 'aqi.db' initialized successfully.")
 
 if __name__ == "__main__":
     init_db()

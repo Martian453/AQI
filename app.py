@@ -1,6 +1,9 @@
 from flask import Flask, render_template, jsonify
 import sqlite3
 import requests
+import csv
+import io
+from flask import Flask, render_template, jsonify, Response
 
 app = Flask(__name__)
 
@@ -59,6 +62,29 @@ def data():
         "o3":   [clean(r[7]) for r in rows]
     }
     return jsonify(response)
+
+@app.route("/export_csv")
+def export_csv():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM aqi_data ORDER BY timestamp DESC")
+    rows = cursor.fetchall()
+    
+    # Get column headers
+    headers = [description[0] for description in cursor.description]
+    conn.close()
+
+    # Create CSV in memory
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(headers)
+    writer.writerows(rows)
+    
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment;filename=aqi_water_report.csv"}
+    )
 
 if __name__ == "__main__":
     app.run(debug=True, host='0.0.0.0', port=5000)
